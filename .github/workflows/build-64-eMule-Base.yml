@@ -1,0 +1,41 @@
+name: Build 64 eMule Base Fonctionnelle
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Recuperer les fichiers
+        uses: actions/checkout@v5
+
+      - name: Reconstruire la base fonctionnelle
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f 64-eMule-Base-Part1.zip
+          test -f 64-eMule-Base-Part2.zip
+          mkdir -p base-parts apk-result
+          unzip -q 64-eMule-Base-Part1.zip -d base-parts
+          unzip -q 64-eMule-Base-Part2.zip -d base-parts
+          cat base-parts/N64-Pad-V8.apk.part-* > apk-result/64-eMule-Base.apk
+
+      - name: Verifier APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "bcf78c6c36b132152376e3f16d399ac1e856ae1e2ef6e9611443208ef0e4bbeb  apk-result/64-eMule-Base.apk" | sha256sum -c -
+          unzip -t apk-result/64-eMule-Base.apk
+
+      - name: Publier APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: 64-eMule-Base-Fonctionnelle
+          path: apk-result/64-eMule-Base.apk
+          if-no-files-found: error
+          retention-days: 30
