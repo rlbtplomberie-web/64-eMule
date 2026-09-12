@@ -1,0 +1,75 @@
+name: Build 64 eMule Skin64 V7 Controls Stable
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Recuperer les fichiers
+        uses: actions/checkout@v5
+
+      - name: Installer Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Telecharger la base verrouillee
+        run: |
+          set -euo pipefail
+          git clone --filter=blob:none https://github.com/mupen64plus-ae/mupen64plus-ae.git m64base
+          git -C m64base checkout 33bf7021549d7873e976884370fbd1a8e7333bc7
+
+      - name: Installer Skin64 V7
+        run: |
+          set -euo pipefail
+          test -f 64-eMule-Skin64-V7.zip
+          mkdir -p package-v7
+          unzip -q 64-eMule-Skin64-V7.zip -d package-v7
+          marker=$(find package-v7 -type f -name SKIN64_EMULE_V7 -print -quit)
+          test -n "$marker"
+          cp -a "$(dirname "$marker")"/. m64base/
+
+      - name: Configurer Android
+        run: printf 'sdk.dir=%s\n' "$ANDROID_SDK_ROOT" > m64base/local.properties
+
+      - name: Verifier controles et boucle deux pads
+        run: |
+          set -euo pipefail
+          for pad in portrait paysage paysage2 paysage_touches; do
+            test -f "m64base/app/src/main/assets/skinn64/$pad/positions.json"
+          done
+          map=m64base/app/src/main/java/paulscode/android/mupen64plusae/input/map/SkinN64TouchMap.java
+          game=m64base/app/src/main/java/paulscode/android/mupen64plusae/game/GameActivity.java
+          grep -q 'variant=(variant+1)%2' "$map"
+          grep -q 'stickPointerId' "$map"
+          grep -q 'pressFrame' "$map"
+          grep -q 'course\*2f' "$map"
+          grep -q 'MOVE/UP must still reach TouchController' "$game"
+          grep -q 'LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES' "$game"
+          grep -q 'onConfigurationChanged' "$game"
+
+      - name: Compiler APK
+        working-directory: m64base
+        run: ./gradlew :app:clean :app:assembleDebug --no-daemon --stacktrace --no-build-cache
+
+      - name: Preparer APK
+        run: |
+          set -euo pipefail
+          mkdir -p apk-result
+          apk=$(find m64base/app/build/outputs/apk -type f -name '*.apk' -print -quit)
+          test -n "$apk"
+          cp "$apk" apk-result/64-eMule-Skin64-V7.apk
+
+      - name: Publier APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: 64-eMule-Skin64-V7
+          path: apk-result/64-eMule-Skin64-V7.apk
+          if-no-files-found: error
